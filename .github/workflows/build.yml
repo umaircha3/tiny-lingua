@@ -1,0 +1,43 @@
+name: build
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: Build project
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v2
+
+      - name: Set up Java
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'adopt'
+          java-version: 11
+          cache: 'gradle'
+
+      - name: Build and test
+        run: ./gradlew build
+
+      - name: Check accuracy reports regression
+        id: check-accuracy-reports
+        run: |
+          ./gradlew accuracyReport -Pdetectors=Lingua
+          echo "Checking for diff"
+          # --exit-code causes exit code 1 if difference is detected
+          git diff --output=accuracy-reports.diff --exit-code
+
+      - name: Upload accuracy reports diff
+        uses: actions/upload-artifact@v3
+        # Only run if accuracy reports differ
+        if: failure() && steps.check-accuracy-reports.outcome == 'failure'
+        with:
+          name: accuracy-reports-diff
+          path: accuracy-reports.diff
+
+      # Stop Gradle daemon to avoid having it cause issues for workflow cache creation
+      - name: Stop Gradle daemon
+        run: |
+          ./gradlew --stop
